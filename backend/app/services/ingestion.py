@@ -7,24 +7,24 @@ Orchestrates the full ingestion pipeline:
 3. Embedding generation (dense + sparse)
 4. Store chunks in PostgreSQL
 5. Generate dynamic graph schema
-6. Extract knowledge graph nodes and edges
-7. Store graph in PostgreSQL
+6. Extract knowledge graph entities and relations
+7. Store the knowledge graph in Neo4j
 """
 
 import hashlib
 import logging
-import uuid
+from collections import Counter
 from pathlib import Path
-from typing import AsyncIterator, Callable, Optional
+from typing import Callable, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.embeddings import embed_texts
-from app.core.graph import extract_graph_elements, generate_document_schema
+from app.core.graph import extract_graph_elements, generate_document_schema, write_graph_elements
 from app.core.language import process_chunk_language
 from app.core.parsing import classify_and_parse
 from app.core.parsing.models import ParsedChunk
-from app.models.database import Chunk, Document, GraphEdge, GraphNode
+from app.models.database import Chunk, Document
 from app.models.schemas import IngestionStatus
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,8 @@ async def ingest_document(
     # Parse PDF into chunks
     parsed_chunks: list[ParsedChunk] = list(classify_and_parse(file_path))
     doc.page_count = max((c.page_number for c in parsed_chunks), default=0)
+    if parsed_chunks:
+        doc.category = Counter(c.chunk_type.value for c in parsed_chunks).most_common(1)[0][0]
 
     _progress("embedding", 0.3, f"Embedding {len(parsed_chunks)} chunks")
 
@@ -159,6 +161,9 @@ async def ingest_document(
 
     await session.flush()
 
+    if chunk_records:
+        doc.language = Counter(c.language_tag for c in chunk_records).most_common(1)[0][0]
+
     _progress("graphing", 0.7, "Generating dynamic graph schema")
 
     # Generate document-specific graph schema
@@ -170,8 +175,11 @@ async def ingest_document(
 
     _progress("graphing", 0.8, "Extracting knowledge graph")
 
-    # Extract graph from each chunk (limit to first 50 for speed)
-    node_id_map: dict[str, GraphNode] = {}
+    # Extract graph elements from each chunk (limit to first 50 for speed),
+    # then write the whole document's graph to Neo4j in two batched round-trips
+    # (one UNWIND for entities, one for relations) rather than per-chunk writes.
+    all_entities: list[dict] = []
+    all_relations: list[dict] = []
 
     for chunk_record in chunk_records[:50]:
         entities, relations = await extract_graph_elements(
@@ -181,35 +189,12 @@ async def ingest_document(
             schema=schema,
             llm_client=llm_client,
         )
+        all_entities.extend(entities)
+        all_relations.extend(relations)
 
-        # Persist nodes
-        for ent in entities:
-            node = GraphNode(
-                id=uuid.UUID(ent["id"]),
-                document_id=doc.id,
-                chunk_id=chunk_record.id,
-                label=ent["label"],
-                entity_type=ent["entity_type"],
-                description=ent.get("description", ""),
-            )
-            session.add(node)
-            node_id_map[ent["id"]] = node
-
-        await session.flush()
-
-        # Persist edges
-        for rel in relations:
-            if rel["source_id"] in node_id_map and rel["target_id"] in node_id_map:
-                edge = GraphEdge(
-                    id=uuid.UUID(rel["id"]),
-                    source_id=uuid.UUID(rel["source_id"]),
-                    target_id=uuid.UUID(rel["target_id"]),
-                    relation_type=rel["relation_type"],
-                    weight=rel.get("weight", 1.0),
-                )
-                session.add(edge)
+    await write_graph_elements(all_entities, all_relations)
 
     doc.is_processed = True
-    _progress("done", 1.0, f"Ingested {len(parsed_chunks)} chunks, {len(node_id_map)} graph nodes")
+    _progress("done", 1.0, f"Ingested {len(parsed_chunks)} chunks, {len(all_entities)} graph nodes")
 
     return doc

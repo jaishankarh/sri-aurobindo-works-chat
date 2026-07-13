@@ -20,7 +20,7 @@
  */
 
 import { useCallback } from "react";
-import { Settings, BookOpen } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { usePDFStore } from "@/stores/usePDFStore";
 import { ChatInterface } from "@/components/Chat/ChatInterface";
@@ -29,7 +29,6 @@ import { SettingsPanel } from "@/components/Settings/SettingsPanel";
 
 export default function App() {
   const toggleSettings = useSettingsStore((s) => s.toggleSettingsPanel);
-  const currentDocumentPath = usePDFStore((s) => s.currentDocumentPath);
 
   const handleLogoClick = useCallback(() => {
     usePDFStore.getState().loadDocument("");
@@ -39,7 +38,10 @@ export default function App() {
     <div className="flex h-full flex-col bg-white">
       {/* Header */}
       <header className="flex items-center gap-3 border-b border-stone-200 bg-white px-4 py-2.5 shadow-sm z-10">
-        <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={handleLogoClick}
+        >
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500">
             <span className="text-white font-bold text-sm">✦</span>
           </div>

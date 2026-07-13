@@ -32,7 +32,7 @@ ftfy==6.3.1
 
 # Embeddings & ML
 torch==2.5.1
-transformers==4.47.1
+transformers==4.44.2  # pinned to FlagEmbedding's exact requirement (also within sentence-transformers' range)
 sentence-transformers==3.3.1
 FlagEmbedding==1.3.3
 numpy==1.26.4
@@ -46,8 +46,8 @@ openai==1.57.2
 anthropic==0.40.0
 ollama==0.4.4
 
-# Graph operations
-networkx==3.4.2
+# Graph database (knowledge graph entities/relations, multi-hop traversal)
+neo4j==5.27.0
 
 # Data & Utilities
 pydantic==2.10.3

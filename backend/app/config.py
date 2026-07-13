@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     REDIS_STREAM_KEY: str = "rag:stream:{session_id}"
     REDIS_SESSION_TTL: int = 86400  # 24 hours
 
+    # Neo4j (knowledge graph store — entities/relations, multi-hop traversal)
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = "aurobindo_graph"
+
     # Prefect
     PREFECT_API_URL: str = "http://localhost:4200/api"
 

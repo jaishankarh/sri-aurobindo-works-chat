@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import chat_router, documents_router, settings_router
 from app.config import settings
+from app.core.graph import close_neo4j_driver, init_neo4j_schema
 from app.database import close_db, init_db
 
 # ── Logging setup ──────────────────────────────────────────────────────────────
@@ -46,7 +47,9 @@ async def lifespan(app: FastAPI):
         f"Starting {settings.APP_NAME} v{settings.APP_VERSION}"
     )
     await init_db()
+    await init_neo4j_schema()
     yield
+    await close_neo4j_driver()
     await close_db()
 
 

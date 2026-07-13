@@ -11,7 +11,7 @@
 
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
-import type { ChatMessage, Citation, WSEvent } from "@/types";
+import type { ChatMessage, Citation } from "@/types";
 
 interface ChatStore {
   // State

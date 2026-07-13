@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFi
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.graph import delete_document_graph
 from app.database import get_db_session
 from app.models.database import Document
 from app.models.schemas import DocumentResponse, IngestionRequest, IngestionStatus
@@ -72,8 +73,9 @@ async def delete_document(
     document_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_session),
 ) -> None:
-    """Delete a document and all its chunks and graph nodes."""
+    """Delete a document, its chunks (Postgres), and its graph entities (Neo4j)."""
     doc = await db.get(Document, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    await delete_document_graph(str(document_id))
     await db.delete(doc)

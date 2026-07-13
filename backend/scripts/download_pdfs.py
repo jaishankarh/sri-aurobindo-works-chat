@@ -137,9 +137,16 @@ async def _download_pdf(
             return False
 
 
-async def download_corpus(output_dir: str | Path = "./data/pdfs") -> list[dict]:
+async def download_corpus(
+    output_dir: str | Path = "./data/pdfs", limit: int | None = None
+) -> list[dict]:
     """
-    Main download function: scrape all corpus pages and download all PDFs.
+    Main download function: scrape corpus pages and download PDFs.
+
+    Args:
+        output_dir: Directory to save PDFs.
+        limit: If set, stop after this many PDFs total (across both sources) —
+            useful for a small smoke test instead of the full corpus.
 
     Returns a list of manifest entries for each downloaded file.
     """
@@ -151,6 +158,9 @@ async def download_corpus(output_dir: str | Path = "./data/pdfs") -> list[dict]:
 
     async with aiohttp.ClientSession() as session:
         for source in CORPUS_SOURCES:
+            if limit is not None and len(manifest) >= limit:
+                break
+
             author = source["author"]
             author_dir = output_dir / _sanitize_filename(author)
             author_dir.mkdir(exist_ok=True)
@@ -175,6 +185,10 @@ async def download_corpus(output_dir: str | Path = "./data/pdfs") -> list[dict]:
                 continue
 
             logger.info(f"Found {len(links)} PDF links")
+
+            if limit is not None:
+                remaining = limit - len(manifest)
+                links = links[:remaining]
 
             # Download all PDFs concurrently (with semaphore rate limiting)
             tasks = []
@@ -264,9 +278,15 @@ if __name__ == "__main__":
         action="store_true",
         help="Also queue downloaded PDFs for RAG ingestion",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Stop after downloading this many PDFs total (for a small smoke test)",
+    )
     args = parser.parse_args()
 
-    manifest = asyncio.run(download_corpus(args.output_dir))
+    manifest = asyncio.run(download_corpus(args.output_dir, limit=args.limit))
 
     if args.ingest:
         manifest_path = Path(args.output_dir) / "manifest.json"

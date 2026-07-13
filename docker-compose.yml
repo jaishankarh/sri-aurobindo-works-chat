@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ── PostgreSQL with pgvector ─────────────────────────────────────────────────
   postgres:
@@ -10,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ragpassword
       POSTGRES_DB: rag_db
     ports:
-      - "5432:5432"
+      - "5435:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,12 +17,32 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Neo4j (knowledge graph store) ────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5-community
+    container_name: aurobindo_neo4j
+    environment:
+      NEO4J_AUTH: neo4j/aurobindo_graph
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_memory_heap_max__size: 1G
+    ports:
+      - "7475:7474" # Browser UI
+      - "7688:7687" # Bolt protocol
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p aurobindo_graph 'RETURN 1'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
   # ── Redis ────────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: aurobindo_redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
@@ -40,12 +58,13 @@ services:
     container_name: aurobindo_prefect
     command: prefect server start --host 0.0.0.0
     ports:
-      - "4200:4200"
+      - "4201:4200"
     environment:
       PREFECT_SERVER_API_HOST: 0.0.0.0
-      PREFECT_UI_API_URL: http://localhost:4200/api
+      PREFECT_UI_API_URL: http://localhost:4201/api
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      # prefecthq/prefect image has no curl; use python3 (always present) instead
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -77,6 +96,9 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://rag:ragpassword@postgres:5432/rag_db
       REDIS_URL: redis://redis:6379
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: aurobindo_graph
       PREFECT_API_URL: http://prefect:4200/api
       LLM_PROVIDER: ollama
       LLM_BASE_URL: http://ollama:11434
@@ -84,14 +106,16 @@ services:
       EMBEDDING_MODEL: BAAI/bge-m3
       EMBEDDING_DEVICE: cpu
       LOG_LEVEL: INFO
-      CORS_ORIGINS: '["http://localhost:3000"]'
+      CORS_ORIGINS: '["http://localhost:3001"]'
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./data:/app/data
       - ./backend:/app/backend:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      neo4j:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -109,13 +133,16 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_WS_URL: ws://localhost:8001
     container_name: aurobindo_frontend
     ports:
-      - "3000:80"
+      - "3001:80"
     depends_on:
       - backend
 
 volumes:
   postgres_data:
+  neo4j_data:
   redis_data:
   ollama_data:

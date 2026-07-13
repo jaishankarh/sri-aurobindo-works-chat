@@ -15,7 +15,6 @@ import { useCallback, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
-import { clsx } from "clsx";
 import {
   ChevronLeft,
   ChevronRight,
@@ -51,7 +50,6 @@ export function PDFViewer() {
     setZoom,
   } = usePDFStore();
 
-  const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const pageWidth = Math.round(BASE_PAGE_WIDTH * zoom);
@@ -59,7 +57,6 @@ export function PDFViewer() {
   const handleDocumentLoadSuccess = useCallback(
     ({ numPages }: { numPages: number }) => {
       setTotalPages(numPages);
-      setIsLoading(false);
       setLoadError(null);
     },
     [setTotalPages]

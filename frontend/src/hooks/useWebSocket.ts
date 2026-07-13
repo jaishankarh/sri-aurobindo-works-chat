@@ -47,7 +47,7 @@ export function useWebSocket({ sessionId }: UseWebSocketOptions) {
     lastSeenStreamId,
   } = useChatStore();
 
-  const { addHighlights, jumpToCitation } = usePDFStore();
+  const { addHighlights } = usePDFStore();
 
   const handleEvent = useCallback(
     (event: WSEvent) => {

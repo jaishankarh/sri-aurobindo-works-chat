@@ -42,7 +42,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       settings: { ...DEFAULT_SETTINGS },
       availableDocuments: [],
       isSettingsOpen: false,

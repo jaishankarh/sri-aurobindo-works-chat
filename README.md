@@ -18,7 +18,7 @@ This system solves each problem through purpose-built architecture:
 | Sanskrit text | `indic-transliteration` → IAST + glossary injection |
 | Cross-lingual retrieval | `BAAI/bge-m3` shared 100+-language vector space |
 | Keyword + semantic blend | Reciprocal Rank Fusion (RRF) with tunable α coefficient |
-| Multi-hop reasoning | Dynamic GraphRAG with document-specific LLM-generated schemas |
+| Multi-hop reasoning | Dynamic GraphRAG in Neo4j with document-specific LLM-generated schemas |
 | Reconnect resilience | Redis Streams "Replay-then-Tail" pattern (zero token loss) |
 | PDF canvas performance | Decoupled Zustand stores (chat tokens ≠ PDF re-renders) |
 
@@ -50,14 +50,15 @@ This system solves each problem through purpose-built architecture:
 │  │  Redis Streams │  │  Hybrid Retrieval                              ││
 │  │  XADD / XRANGE │  │  Dense (pgvector) + Sparse (BM25) + Graph      ││
 │  │  Replay-then-  │  │  Fused via RRF (configurable α)                ││
-│  │  Tail pattern  │  └───────────┬────────────────────────────────────┘│
-│  └────────────────┘              │                                       │
-│                        ┌─────────▼──────────┐                           │
-│                        │  PostgreSQL +       │                           │
-│                        │  pgvector           │                           │
-│                        │  Chunks / Nodes /   │                           │
-│                        │  Edges / Sessions   │                           │
-│                        └────────────────────┘                           │
+│  │  Tail pattern  │  └──────┬─────────────────────────────────┬───────┘│
+│  └────────────────┘         │                                 │        │
+│                   ┌─────────▼──────────┐          ┌───────────▼──────┐ │
+│                   │  PostgreSQL +      │          │  Neo4j           │ │
+│                   │  pgvector          │          │  Entities /      │ │
+│                   │  Chunks / Sessions │          │  Relations       │ │
+│                   │  Documents         │          │  (multi-hop      │ │
+│                   │                    │          │  Cypher query)   │ │
+│                   └────────────────────┘          └──────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -72,6 +73,7 @@ This system solves each problem through purpose-built architecture:
 | Orchestration | Prefect 3 | Background task observability |
 | Streaming | Redis Streams | Replay-then-Tail token delivery |
 | Vector store | PostgreSQL + pgvector | Dense ANN search |
+| Graph store | Neo4j | Entity/relation storage, native multi-hop Cypher traversal |
 | Embeddings | BAAI/bge-m3 | Dense + sparse, 100+ languages |
 | PDF parsing (prose) | Docling (IBM) | Hierarchical structure |
 | PDF parsing (poetry/plays) | PyMuPDF spatial grid | Whitespace preservation |
@@ -115,6 +117,7 @@ docker-compose up -d
 
 This starts:
 - PostgreSQL 16 with pgvector at `:5432`
+- Neo4j 5 at `:7687` (Bolt) / `:7474` (Browser UI)
 - Redis 7 at `:6379`
 - Prefect server at `:4200`
 - Ollama at `:11434`

@@ -1,0 +1,16 @@
+{
+    "permissions": {
+      "commands": {
+        "uvicorn *": "allow",
+        "alembic *": "allow",
+        "poetry run *": "allow",
+        "npm run dev": "allow",
+        "*": "ask"
+      },
+      "fileAccess": {
+        "allow": ["apps/**/*", "requirements.txt", "pyproject.toml", "package.json", "CLAUDE.md"],
+        "deny": ["~/.ssh/**/*", "~/.aws/**/*", "~/.env*"]
+      }
+    }
+  }
+  
