@@ -54,7 +54,9 @@ def _extract_page_spans(page: fitz.Page) -> list[dict]:
             line_text = ""
             line_bbox = None
             for span in line.get("spans", []):
-                text = span.get("text", "")
+                # "rawdict" spans carry per-character entries under "chars"
+                # (unlike "dict" mode, which has a flat "text" string directly).
+                text = "".join(c.get("c", "") for c in span.get("chars", []))
                 bbox = span.get("bbox")
                 if text and bbox:
                     line_text += text

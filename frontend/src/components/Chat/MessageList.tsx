@@ -36,7 +36,7 @@ export function MessageList() {
           ].map((suggestion) => (
             <button
               key={suggestion}
-              className="rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-left text-sm text-stone-600 hover:border-amber-300 hover:bg-amber-50 transition-all"
+              className="rounded-lg border border-stone-200 bg-surface px-4 py-2.5 text-left text-sm text-stone-600 hover:border-amber-300 hover:bg-amber-50 transition-all"
               onClick={() => {
                 // Dispatch suggestion click
                 const event = new CustomEvent("rag:suggestion", {

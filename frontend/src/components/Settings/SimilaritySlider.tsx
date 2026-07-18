@@ -54,7 +54,7 @@ export function SimilaritySlider() {
           <Slider.Range className="absolute h-full rounded-full bg-amber-400" />
         </Slider.Track>
         <Slider.Thumb
-          className="block h-5 w-5 rounded-full border-2 border-amber-500 bg-white shadow-md focus:outline-none focus:ring-2 focus:ring-amber-300 hover:border-amber-600 cursor-grab active:cursor-grabbing"
+          className="block h-5 w-5 rounded-full border-2 border-amber-500 bg-surface shadow-md focus:outline-none focus:ring-2 focus:ring-amber-300 hover:border-amber-600 cursor-grab active:cursor-grabbing"
           aria-label="Alpha"
         />
       </Slider.Root>

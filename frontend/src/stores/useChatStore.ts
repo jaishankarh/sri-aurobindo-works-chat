@@ -19,6 +19,7 @@ interface ChatStore {
   streamingMessageId: string | null;
   streamingContent: string;
   streamingStatus: string | null;
+  streamingStatusDetail: string | null;
   sessionId: string | null;
   isConnected: boolean;
   error: string | null;
@@ -29,8 +30,9 @@ interface ChatStore {
   addUserMessage: (query: string) => ChatMessage;
   startStreaming: (messageId: string) => void;
   appendToken: (token: string) => void;
-  setStreamingStatus: (status: string) => void;
-  finalizeStreaming: (citations: Citation[]) => void;
+  setStreamingStatus: (status: string, detail?: string) => void;
+  setStreamingCitations: (citations: Citation[]) => void;
+  finalizeStreaming: () => void;
   setError: (error: string) => void;
   setConnected: (connected: boolean) => void;
   setLastSeenStreamId: (id: string) => void;
@@ -47,6 +49,7 @@ export const useChatStore = create<ChatStore>()(
     streamingMessageId: null,
     streamingContent: "",
     streamingStatus: null,
+    streamingStatusDetail: null,
     sessionId: null,
     isConnected: false,
     error: null,
@@ -83,6 +86,7 @@ export const useChatStore = create<ChatStore>()(
         streamingMessageId: messageId,
         streamingContent: "",
         streamingStatus: "thinking",
+        streamingStatusDetail: null,
       }));
     },
 
@@ -100,18 +104,36 @@ export const useChatStore = create<ChatStore>()(
       });
     },
 
-    setStreamingStatus: (status) => set({ streamingStatus: status }),
+    setStreamingStatus: (status, detail) =>
+      set({ streamingStatus: status, streamingStatusDetail: detail ?? null }),
 
-    finalizeStreaming: (citations) => {
+    // Citations are set directly from this message's own "citation" WS event
+    // as soon as it arrives — NOT derived from usePDFStore's highlights at
+    // completion time. That store accumulates highlights across the whole
+    // session (never cleared between messages), so deriving citations from
+    // it at completion attributed every prior message's citations to
+    // whichever message happened to be streaming, and any subsequent
+    // highlight-clearing (e.g. opening a new PDF) would appear to make an
+    // already-completed message's citations vanish.
+    setStreamingCitations: (citations) => {
+      set((state) => ({
+        messages: state.messages.map((m) =>
+          m.id === state.streamingMessageId ? { ...m, citations } : m
+        ),
+      }));
+    },
+
+    finalizeStreaming: () => {
       set((state) => ({
         messages: state.messages.map((m) =>
           m.id === state.streamingMessageId
-            ? { ...m, citations, status: "complete" as const }
+            ? { ...m, status: "complete" as const }
             : m
         ),
         streamingMessageId: null,
         streamingContent: "",
         streamingStatus: null,
+        streamingStatusDetail: null,
       }));
     },
 
@@ -125,6 +147,7 @@ export const useChatStore = create<ChatStore>()(
         ),
         streamingMessageId: null,
         streamingStatus: null,
+        streamingStatusDetail: null,
       }));
     },
 
@@ -140,6 +163,7 @@ export const useChatStore = create<ChatStore>()(
         streamingMessageId: null,
         streamingContent: "",
         streamingStatus: null,
+        streamingStatusDetail: null,
         error: null,
         lastSeenStreamId: "0",
       }),

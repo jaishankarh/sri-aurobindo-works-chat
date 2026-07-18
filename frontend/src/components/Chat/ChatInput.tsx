@@ -52,7 +52,7 @@ export function ChatInput({
   const isDisabled = disabled || isStreaming;
 
   return (
-    <div className="border-t border-stone-200 bg-white px-4 py-3">
+    <div className="border-t border-stone-200 bg-surface px-4 py-3">
       <div
         className={clsx(
           "flex items-end gap-2 rounded-xl border bg-stone-50 px-3 py-2 transition-all",

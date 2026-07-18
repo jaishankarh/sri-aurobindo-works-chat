@@ -4,7 +4,13 @@
  * Implements the client side of the Replay-then-Tail protocol:
  * - Sends queries to the backend WebSocket
  * - Tracks the last seen Redis stream ID for reconnect recovery
- * - Automatically reconnects on disconnect using exponential backoff
+ * - Automatically reconnects on disconnect using exponential backoff — but
+ *   ONLY while a response is still in flight. The server closes the socket
+ *   normally after every "complete"/"error" event (one connection per
+ *   query/response cycle by design), so reconnecting after that would just
+ *   loop forever: reconnect → replay the already-terminal event → server
+ *   closes again → onclose fires → reconnect... This is gated on
+ *   activeMessageIdRef, which is cleared exactly when a terminal event arrives.
  * - Dispatches events to useChatStore without touching usePDFStore
  *   (chat tokens must never trigger PDF canvas re-renders)
  */
@@ -32,6 +38,12 @@ export function useWebSocket({ sessionId }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The server's message_id for the response currently in flight — set on
+  // every status/token/citation event, cleared on complete/error. Reconnect
+  // is only attempted while this is non-null (i.e. we were cut off mid-stream).
+  const activeMessageIdRef = useRef<string | null>(null);
+  // A query submitted while disconnected — sent as soon as a fresh connection opens.
+  const pendingQueryRef = useRef<SendQueryOptions | null>(null);
   const [connectionState, setConnectionState] = useState<
     "disconnected" | "connecting" | "connected"
   >("disconnected");
@@ -40,6 +52,7 @@ export function useWebSocket({ sessionId }: UseWebSocketOptions) {
     startStreaming,
     appendToken,
     setStreamingStatus,
+    setStreamingCitations,
     finalizeStreaming,
     setError,
     setConnected,
@@ -53,10 +66,12 @@ export function useWebSocket({ sessionId }: UseWebSocketOptions) {
     (event: WSEvent) => {
       switch (event.type) {
         case "status":
-          setStreamingStatus(event.data.status);
+          activeMessageIdRef.current = event.message_id;
+          setStreamingStatus(event.data.status, event.data.detail);
           break;
 
         case "token":
+          activeMessageIdRef.current = event.message_id;
           appendToken(event.data);
           // Track stream position for reconnect recovery
           if ("_stream_id" in event) {
@@ -65,23 +80,37 @@ export function useWebSocket({ sessionId }: UseWebSocketOptions) {
           break;
 
         case "citation":
+          activeMessageIdRef.current = event.message_id;
           if (event.data.citations.length > 0) {
+            // Set directly on this message (not derived from usePDFStore's
+            // highlights, which accumulate across the whole session).
+            setStreamingCitations(event.data.citations);
+            // Still feed the PDF viewer's highlight overlay separately.
             addHighlights(event.data.citations);
           }
           break;
 
         case "complete":
-          // Finalize the streaming message with all accumulated citations
-          const { highlights } = usePDFStore.getState();
-          finalizeStreaming(highlights.map((h) => h.citation));
+          // Terminal event — nothing left to reconnect to for this message.
+          activeMessageIdRef.current = null;
+          finalizeStreaming();
           break;
 
         case "error":
+          activeMessageIdRef.current = null;
           setError(event.data.error);
           break;
       }
     },
-    [appendToken, setStreamingStatus, finalizeStreaming, setError, addHighlights, setLastSeenStreamId]
+    [
+      appendToken,
+      setStreamingStatus,
+      setStreamingCitations,
+      finalizeStreaming,
+      setError,
+      addHighlights,
+      setLastSeenStreamId,
+    ]
   );
 
   const connect = useCallback(
@@ -98,12 +127,27 @@ export function useWebSocket({ sessionId }: UseWebSocketOptions) {
         setConnected(true);
         reconnectAttempts.current = 0;
 
-        if (isReconnect) {
-          // Send reconnect message with last known stream position
+        if (isReconnect && activeMessageIdRef.current) {
+          // Resume the in-flight response
           ws.send(
             JSON.stringify({
               type: "reconnect",
+              message_id: activeMessageIdRef.current,
               last_seen_id: lastSeenStreamId,
+            })
+          );
+        } else if (pendingQueryRef.current) {
+          // A query was submitted while disconnected — send it now
+          const { query, settings, messageId } = pendingQueryRef.current;
+          pendingQueryRef.current = null;
+          startStreaming(messageId);
+          ws.send(
+            JSON.stringify({
+              type: "query",
+              query,
+              session_id: sessionId,
+              settings,
+              last_seen_id: "0",
             })
           );
         }
@@ -123,8 +167,11 @@ export function useWebSocket({ sessionId }: UseWebSocketOptions) {
         setConnected(false);
         wsRef.current = null;
 
-        // Exponential backoff reconnection
-        if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+        // Only reconnect if we were actually cut off mid-response — the
+        // server closes normally after every completed/errored response,
+        // and reconnecting to an already-terminal stream would just loop
+        // forever (replay the terminal event, close, reconnect, repeat).
+        if (activeMessageIdRef.current && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
           const delay =
             RECONNECT_BASE_DELAY_MS *
             Math.pow(2, reconnectAttempts.current);
@@ -137,35 +184,40 @@ export function useWebSocket({ sessionId }: UseWebSocketOptions) {
         console.error("WebSocket error:", e);
       };
     },
-    [sessionId, lastSeenStreamId, handleEvent, setConnected]
+    [sessionId, lastSeenStreamId, handleEvent, setConnected, startStreaming]
   );
 
   const sendQuery = useCallback(
     ({ query, settings, messageId }: SendQueryOptions) => {
-      if (wsRef.current?.readyState !== WebSocket.OPEN) {
-        setError("Not connected. Please wait for reconnection.");
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        startStreaming(messageId);
+        wsRef.current.send(
+          JSON.stringify({
+            type: "query",
+            query,
+            session_id: sessionId,
+            settings,
+            last_seen_id: "0",
+          })
+        );
         return;
       }
 
-      startStreaming(messageId);
-
-      wsRef.current.send(
-        JSON.stringify({
-          type: "query",
-          query,
-          session_id: sessionId,
-          settings: settings,
-          last_seen_id: "0",
-        })
-      );
+      // Not connected — the previous response's connection closed normally
+      // and we deliberately didn't reconnect. Queue this query and open a
+      // fresh connection for it.
+      pendingQueryRef.current = { query, settings, messageId };
+      reconnectAttempts.current = 0;
+      connect(false);
     },
-    [sessionId, startStreaming, setError]
+    [sessionId, startStreaming, connect]
   );
 
   const disconnect = useCallback(() => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
     }
+    activeMessageIdRef.current = null;
     reconnectAttempts.current = MAX_RECONNECT_ATTEMPTS; // prevent auto-reconnect
     wsRef.current?.close();
   }, []);
@@ -173,6 +225,7 @@ export function useWebSocket({ sessionId }: UseWebSocketOptions) {
   useEffect(() => {
     connect(false);
     return () => disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // reconnect when session changes
 
   return {

@@ -9,7 +9,11 @@ Implements the "Replay-then-Tail" pattern for resilient WebSocket delivery:
    b. Subscribes to new entries in real-time (TAIL)
 
 This guarantees zero token loss even if the browser is closed during generation.
-The stream is keyed by session_id and expires after REDIS_SESSION_TTL seconds.
+
+The stream is keyed by message_id (one query/response cycle), NOT session_id.
+A session spans many messages, so keying by session_id would make every new
+query in the same session replay every prior query's tokens from the start —
+it did, before this was fixed. Expires after REDIS_SESSION_TTL seconds.
 """
 
 import asyncio
@@ -30,8 +34,8 @@ _STREAM_READ_BLOCK_MS = 1000  # block for 1s waiting for new entries
 _STREAM_READ_COUNT = 100  # entries per read batch
 
 
-def _stream_key(session_id: str) -> str:
-    return settings.REDIS_STREAM_KEY.format(session_id=session_id)
+def _stream_key(message_id: str) -> str:
+    return settings.REDIS_STREAM_KEY.format(message_id=message_id)
 
 
 async def get_redis() -> aioredis.Redis:
@@ -45,7 +49,6 @@ async def get_redis() -> aioredis.Redis:
 
 async def publish_token(
     redis: aioredis.Redis,
-    session_id: str,
     message_id: str,
     token: str,
     token_index: int,
@@ -56,14 +59,13 @@ async def publish_token(
     Each stream entry is identified by its auto-generated stream ID (e.g., "1234567890-0"),
     which provides ordering guarantees without a separate sequence counter.
     """
-    key = _stream_key(session_id)
+    key = _stream_key(message_id)
     await redis.xadd(
         key,
         {
             _STREAM_FIELD_TYPE: "token",
             _STREAM_FIELD_DATA: token,
             _STREAM_FIELD_INDEX: str(token_index),
-            "message_id": message_id,
         },
     )
     await redis.expire(key, settings.REDIS_SESSION_TTL)
@@ -71,20 +73,18 @@ async def publish_token(
 
 async def publish_event(
     redis: aioredis.Redis,
-    session_id: str,
     message_id: str,
     event_type: str,
     data: dict,
 ) -> None:
     """Publish a non-token event (citation, status, complete, error) to the stream."""
-    key = _stream_key(session_id)
+    key = _stream_key(message_id)
     await redis.xadd(
         key,
         {
             _STREAM_FIELD_TYPE: event_type,
             _STREAM_FIELD_DATA: json.dumps(data),
             _STREAM_FIELD_INDEX: "-1",
-            "message_id": message_id,
         },
     )
     await redis.expire(key, settings.REDIS_SESSION_TTL)
@@ -92,13 +92,13 @@ async def publish_event(
 
 async def replay_then_tail(
     redis: aioredis.Redis,
-    session_id: str,
+    message_id: str,
     last_seen_id: str = "0",
 ) -> AsyncIterator[dict]:
     """
     Replay historical stream entries then continuously tail new ones.
 
-    Yields stream entry dicts with keys: type, data, idx, message_id.
+    Yields stream entry dicts with keys: type, data, idx.
 
     Algorithm:
     1. XRANGE from last_seen_id to get all replay entries (historical)
@@ -108,10 +108,10 @@ async def replay_then_tail(
 
     Args:
         redis: Async Redis client
-        session_id: The chat session ID
+        message_id: The chat message ID (one query/response cycle)
         last_seen_id: Redis stream ID to replay from ("0" = from beginning)
     """
-    key = _stream_key(session_id)
+    key = _stream_key(message_id)
     cursor = last_seen_id
 
     # Phase 1: REPLAY — read all existing entries from cursor
@@ -148,11 +148,11 @@ async def replay_then_tail(
                     return
 
 
-async def get_stream_length(redis: aioredis.Redis, session_id: str) -> int:
-    """Return the number of entries currently in the session stream."""
-    return await redis.xlen(_stream_key(session_id))
+async def get_stream_length(redis: aioredis.Redis, message_id: str) -> int:
+    """Return the number of entries currently in the message's stream."""
+    return await redis.xlen(_stream_key(message_id))
 
 
-async def delete_stream(redis: aioredis.Redis, session_id: str) -> None:
-    """Delete the Redis stream for a session (cleanup)."""
-    await redis.delete(_stream_key(session_id))
+async def delete_stream(redis: aioredis.Redis, message_id: str) -> None:
+    """Delete the Redis stream for a message (cleanup)."""
+    await redis.delete(_stream_key(message_id))

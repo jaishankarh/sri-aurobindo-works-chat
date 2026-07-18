@@ -46,7 +46,7 @@ async def find_seed_entities(
     async with driver.session() as session:
         result = await session.run(
             """
-            CALL db.index.fulltext.queryNodes('entity_search', $query)
+            CALL db.index.fulltext.queryNodes('entity_search', $search_text)
             YIELD node, score
             WHERE $doc_ids IS NULL OR node.document_id IN $doc_ids
             RETURN node.id AS id, node.label AS label, node.entity_type AS entity_type,
@@ -55,7 +55,7 @@ async def find_seed_entities(
             ORDER BY score DESC
             LIMIT $top_k
             """,
-            query=_sanitize_fulltext_query(query),
+            search_text=_sanitize_fulltext_query(query),
             doc_ids=doc_ids,
             top_k=top_k,
         )
@@ -66,6 +66,7 @@ async def traverse_graph(
     seed_ids: list[str],
     max_hops: int = 2,
     max_nodes: int = 20,
+    document_filter: Optional[list[uuid.UUID]] = None,
 ) -> list[dict]:
     """
     Single-query variable-length traversal from seed nodes.
@@ -73,11 +74,20 @@ async def traverse_graph(
     Neo4j does not allow parameterizing the hop bound inside a relationship
     pattern, so it's spliced in directly — safe here since it's an int clamped
     to _MAX_ALLOWED_HOPS, never raw user input.
+
+    document_filter is enforced on the final node set (seed AND neighbors),
+    not just on seed selection upstream in find_seed_entities — a hop can
+    otherwise land on an entity from a document outside the user's current
+    selection even when the seed itself was correctly scoped. Neo4j can't
+    constrain intermediate/end nodes inside a variable-length pattern without
+    APOC, so this filters the traversal's result set instead of the pattern
+    itself; the corpus-sized graph makes that cheap enough to matter little.
     """
     if not seed_ids:
         return []
 
     hops = max(1, min(max_hops, _MAX_ALLOWED_HOPS))
+    doc_ids = [str(d) for d in document_filter] if document_filter else None
     driver = await get_neo4j_driver()
 
     async with driver.session() as session:
@@ -89,6 +99,7 @@ async def traverse_graph(
             UNWIND nodes AS n
             WITH DISTINCT n
             WHERE n IS NOT NULL
+              AND ($doc_ids IS NULL OR n.document_id IN $doc_ids)
             RETURN n.id AS id, n.label AS label, n.entity_type AS entity_type,
                    n.description AS description, n.chunk_id AS chunk_id,
                    n.document_id AS document_id
@@ -96,6 +107,7 @@ async def traverse_graph(
             """,
             seed_ids=seed_ids,
             max_nodes=max_nodes,
+            doc_ids=doc_ids,
         )
         return [record.data() async for record in result]
 
@@ -133,6 +145,7 @@ async def get_chunks_for_nodes(
             page_number=chunk.page_number,
             bbox=chunk.bbox,
             language_tag=chunk.language_tag,
+            chunk_type=chunk.chunk_type,
             relevance_score=0.7,  # graph traversal has a fixed base score
             retrieval_source="graph",
         )
@@ -165,7 +178,12 @@ async def graph_retrieve(
             return []
 
         seed_ids = [e["id"] for e in seed_entities]
-        all_nodes = await traverse_graph(seed_ids, max_hops=max_hops, max_nodes=top_k * 4)
+        all_nodes = await traverse_graph(
+            seed_ids,
+            max_hops=max_hops,
+            max_nodes=top_k * 4,
+            document_filter=document_filter,
+        )
         return await get_chunks_for_nodes(session, all_nodes)
     except Exception as e:
         logger.warning(f"Graph retrieval failed, continuing without graph context: {e}")

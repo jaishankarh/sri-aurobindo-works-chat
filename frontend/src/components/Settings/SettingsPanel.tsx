@@ -11,10 +11,22 @@
 import { useEffect } from "react";
 import { clsx } from "clsx";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, Settings, RotateCcw } from "lucide-react";
+import { X, Settings, RotateCcw, Check } from "lucide-react";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { THEMES, useThemeStore } from "@/stores/useThemeStore";
 import { SimilaritySlider } from "./SimilaritySlider";
 import { LanguageToggle } from "./LanguageToggle";
+
+// Small static preview swatches per theme (page bg / surface bg / accent) —
+// deliberately not derived from the CSS variables, since the whole point is
+// to preview a theme that ISN'T necessarily the currently-active one.
+const THEME_PREVIEWS: Record<string, { bg: string; surface: string; accent: string }> = {
+  light: { bg: "#fafaf9", surface: "#ffffff", accent: "#f59e0b" },
+  dark: { bg: "#19191a", surface: "#212123", accent: "#f0a91e" },
+  sepia: { bg: "#f8f1e3", surface: "#f4ecd8", accent: "#a8752c" },
+  "solarized-light": { bg: "#fdf6e3", surface: "#eee8d5", accent: "#b58900" },
+  "solarized-dark": { bg: "#002b36", surface: "#073642", accent: "#e0b800" },
+};
 
 export function SettingsPanel() {
   const {
@@ -25,6 +37,7 @@ export function SettingsPanel() {
     resetToDefaults,
     availableDocuments,
   } = useSettingsStore();
+  const { theme, setTheme } = useThemeStore();
 
   // Load available documents on mount
   useEffect(() => {
@@ -40,7 +53,7 @@ export function SettingsPanel() {
         <Dialog.Overlay className="fixed inset-0 bg-black/30 z-40 animate-fade-in" />
         <Dialog.Content
           className={clsx(
-            "fixed right-0 top-0 h-full w-80 bg-white shadow-2xl z-50",
+            "fixed right-0 top-0 h-full w-80 bg-surface shadow-2xl z-50",
             "flex flex-col animate-slide-up"
           )}
         >
@@ -61,6 +74,48 @@ export function SettingsPanel() {
 
           {/* Scrollable settings content */}
           <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            {/* Theme */}
+            <section className="space-y-2">
+              <label className="text-sm font-medium text-stone-700">Theme</label>
+              <div className="grid grid-cols-2 gap-2">
+                {THEMES.map((t) => {
+                  const preview = THEME_PREVIEWS[t.id];
+                  const isActive = theme === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setTheme(t.id)}
+                      className={clsx(
+                        "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-all",
+                        isActive
+                          ? "border-amber-400 ring-2 ring-amber-100"
+                          : "border-stone-200 hover:border-stone-300"
+                      )}
+                      aria-pressed={isActive}
+                    >
+                      <span
+                        className="relative flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-200"
+                        style={{ backgroundColor: preview.bg }}
+                      >
+                        <span
+                          className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-tl"
+                          style={{ backgroundColor: preview.surface }}
+                        />
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: preview.accent }}
+                        />
+                      </span>
+                      <span className="flex-1 text-xs text-stone-700">{t.label}</span>
+                      {isActive && <Check className="h-3.5 w-3.5 text-amber-600" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="border-t border-stone-100" />
+
             {/* Similarity slider */}
             <section>
               <SimilaritySlider />

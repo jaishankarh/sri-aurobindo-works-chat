@@ -1,19 +1,25 @@
 /**
  * Main application layout.
  *
- * Split-pane layout:
+ * Chat is the only pane in the base layout and always takes the full width.
+ * The PDF viewer and settings panel are both slide-in overlays (Radix Dialog)
+ * that mount unconditionally but render nothing until opened — PDFViewer
+ * opens itself when usePDFStore.currentDocumentPath is set (a citation was
+ * clicked); SettingsPanel opens via the header button. Neither takes up
+ * layout space while closed.
+ *
  * ┌─────────────────────────────────────────────────────┐
  * │  Header (title + settings button)                   │
- * ├──────────────────────────┬──────────────────────────┤
- * │                          │                          │
- * │   Chat Interface         │   PDF Viewer             │
- * │   (useChatStore)         │   (usePDFStore)          │
- * │                          │                          │
- * │   Messages stream here   │   Highlights overlay     │
- * │   without affecting      │   without being affected │
- * │   the PDF canvas.        │   by token streaming.    │
- * │                          │                          │
- * └──────────────────────────┴──────────────────────────┘
+ * ├───────────────────────────────────────────────────────┤
+ * │                                                       │
+ * │   Chat Interface (full width)                        │
+ * │   (useChatStore)                                     │
+ * │                                                       │
+ * │   Messages stream here without affecting the PDF     │
+ * │   canvas, which lives in its own overlay and only    │
+ * │   subscribes to usePDFStore.                         │
+ * │                                                       │
+ * └─────────────────────────────────────────────────────┘
  *
  * The strict Zustand store separation ensures that LLM token streaming
  * (useChatStore) does not trigger PDF canvas re-renders (usePDFStore).
@@ -35,9 +41,9 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex h-full flex-col bg-surface">
       {/* Header */}
-      <header className="flex items-center gap-3 border-b border-stone-200 bg-white px-4 py-2.5 shadow-sm z-10">
+      <header className="flex items-center gap-3 border-b border-stone-200 bg-surface px-4 py-2.5 shadow-sm z-10">
         <div
           className="flex items-center gap-2 cursor-pointer"
           onClick={handleLogoClick}
@@ -70,20 +76,15 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main split-pane layout */}
+      {/* Chat: the only pane, always full width */}
       <main className="flex flex-1 overflow-hidden">
-        {/* Chat pane */}
-        <div className="w-[420px] flex-shrink-0 border-r border-stone-200 flex flex-col overflow-hidden">
+        <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
           <ChatInterface />
-        </div>
-
-        {/* PDF viewer pane */}
-        <div className="flex-1 overflow-hidden">
-          <PDFViewer />
         </div>
       </main>
 
-      {/* Settings overlay panel */}
+      {/* Overlay panels — mounted unconditionally, each manages its own open state */}
+      <PDFViewer />
       <SettingsPanel />
     </div>
   );

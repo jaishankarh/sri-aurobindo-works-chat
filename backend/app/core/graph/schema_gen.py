@@ -10,12 +10,11 @@ This two-pass approach avoids a one-size-fits-all ontology that fails for
 heterogeneous corpora (essays vs plays vs correspondences).
 """
 
-import json
 import logging
-import re
 import uuid
 from typing import Optional
 
+from app.core.llm.json_utils import parse_json_object
 from app.models.schemas import DocumentGraphSchema, EntityType, RelationType
 
 logger = logging.getLogger(__name__)
@@ -82,7 +81,7 @@ async def generate_document_schema(
 
     try:
         response_text = await llm_client.generate(prompt, max_tokens=1024)
-        schema_data = _parse_schema_json(response_text)
+        schema_data = parse_json_object(response_text, _default_schema())
     except Exception as e:
         logger.warning(f"Schema generation LLM call failed: {e}. Using default schema.")
         schema_data = _default_schema()
@@ -93,25 +92,6 @@ async def generate_document_schema(
         relation_types=[RelationType(**rt) for rt in schema_data.get("relation_types", [])],
         generation_prompt=prompt,
     )
-
-
-def _parse_schema_json(text: str) -> dict:
-    """Extract and parse JSON from LLM response, handling markdown code blocks."""
-    # Strip markdown code fences
-    text = re.sub(r"```(?:json)?\s*", "", text).strip()
-    text = re.sub(r"```\s*$", "", text).strip()
-
-    # Find JSON object
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start == -1 or end == 0:
-        return _default_schema()
-
-    try:
-        return json.loads(text[start:end])
-    except json.JSONDecodeError:
-        logger.warning("Failed to parse schema JSON from LLM response")
-        return _default_schema()
 
 
 def _default_schema() -> dict:

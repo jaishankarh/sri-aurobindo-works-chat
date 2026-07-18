@@ -32,7 +32,7 @@ async def search_dense(
     """
     embedding_list = query_embedding.tolist()
 
-    filters = []
+    filters = ["c.dense_embedding IS NOT NULL"]
     params: dict = {"embedding": str(embedding_list), "top_k": top_k}
 
     if language_filter:
@@ -44,7 +44,7 @@ async def search_dense(
         filters.append("c.document_id = ANY(:doc_filter)")
         params["doc_filter"] = doc_ids
 
-    where_clause = ("WHERE " + " AND ".join(filters)) if filters else ""
+    where_clause = "WHERE " + " AND ".join(filters)
 
     sql = text(
         f"""
@@ -57,12 +57,12 @@ async def search_dense(
             c.page_number,
             c.bbox,
             c.language_tag,
-            1 - (c.dense_embedding <=> :embedding::vector) AS relevance_score
+            c.chunk_type,
+            1 - (c.dense_embedding <=> CAST(:embedding AS vector)) AS relevance_score
         FROM chunks c
         JOIN documents d ON d.id = c.document_id
         {where_clause}
-        WHERE c.dense_embedding IS NOT NULL
-        ORDER BY c.dense_embedding <=> :embedding::vector
+        ORDER BY c.dense_embedding <=> CAST(:embedding AS vector)
         LIMIT :top_k
         """
     )
@@ -80,6 +80,7 @@ async def search_dense(
             page_number=row["page_number"],
             bbox=row["bbox"],
             language_tag=row["language_tag"],
+            chunk_type=row["chunk_type"],
             relevance_score=max(0.0, float(row["relevance_score"])),
             retrieval_source="vector",
         )
@@ -110,19 +111,7 @@ async def search_sparse_bm25(
     token_ids = list(query_tokens.keys())
     token_weights = list(query_tokens.values())
 
-    filters = []
     params: dict = {"top_k": top_k}
-
-    if language_filter:
-        filters.append("c.language_tag = ANY(:lang_filter)")
-        params["lang_filter"] = language_filter
-
-    if document_filter:
-        doc_ids = [str(d) for d in document_filter]
-        filters.append("c.document_id = ANY(:doc_filter)")
-        params["doc_filter"] = doc_ids
-
-    where_clause = ("WHERE " + " AND ".join(filters)) if filters else ""
 
     # For each token_id, extract its weight from the JSONB and multiply
     # This approach is a simplification; a production system would use
@@ -133,6 +122,19 @@ async def search_sparse_bm25(
     )
     if not score_exprs:
         return []
+
+    filters = ["c.sparse_embedding IS NOT NULL", f"({score_exprs}) > 0"]
+
+    if language_filter:
+        filters.append("c.language_tag = ANY(:lang_filter)")
+        params["lang_filter"] = language_filter
+
+    if document_filter:
+        doc_ids = [str(d) for d in document_filter]
+        filters.append("c.document_id = ANY(:doc_filter)")
+        params["doc_filter"] = doc_ids
+
+    where_clause = "WHERE " + " AND ".join(filters)
 
     sql = text(
         f"""
@@ -145,12 +147,11 @@ async def search_sparse_bm25(
             c.page_number,
             c.bbox,
             c.language_tag,
+            c.chunk_type,
             ({score_exprs}) AS relevance_score
         FROM chunks c
         JOIN documents d ON d.id = c.document_id
         {where_clause}
-        WHERE c.sparse_embedding IS NOT NULL
-          AND ({score_exprs}) > 0
         ORDER BY relevance_score DESC
         LIMIT :top_k
         """
@@ -173,6 +174,7 @@ async def search_sparse_bm25(
             page_number=row["page_number"],
             bbox=row["bbox"],
             language_tag=row["language_tag"],
+            chunk_type=row["chunk_type"],
             relevance_score=max(0.0, float(row["relevance_score"])),
             retrieval_source="keyword",
         )

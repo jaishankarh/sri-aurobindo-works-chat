@@ -5,12 +5,11 @@ Uses the dynamically generated document schema to prompt an LLM and extract
 (entity, relation, entity) triples from each text chunk.
 """
 
-import json
 import logging
-import re
 import uuid
 from typing import Optional
 
+from app.core.llm.json_utils import parse_json_object
 from app.models.schemas import DocumentGraphSchema
 
 logger = logging.getLogger(__name__)
@@ -78,7 +77,7 @@ async def extract_graph_elements(
 
     try:
         response_text = await llm_client.generate(prompt, max_tokens=512)
-        data = _parse_extraction_json(response_text)
+        data = parse_json_object(response_text, {"entities": [], "relations": []})
     except Exception as e:
         logger.warning(f"Extraction failed for chunk {chunk_id}: {e}")
         return [], []
@@ -130,19 +129,3 @@ async def extract_graph_elements(
             )
 
     return entities, relations
-
-
-def _parse_extraction_json(text: str) -> dict:
-    """Parse JSON from LLM extraction response."""
-    text = re.sub(r"```(?:json)?\s*", "", text).strip()
-    text = re.sub(r"```\s*$", "", text).strip()
-
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start == -1 or end == 0:
-        return {"entities": [], "relations": []}
-
-    try:
-        return json.loads(text[start:end])
-    except json.JSONDecodeError:
-        return {"entities": [], "relations": []}

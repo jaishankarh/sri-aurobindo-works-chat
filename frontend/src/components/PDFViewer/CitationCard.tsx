@@ -36,7 +36,7 @@ export const CitationCard = memo(({ citation, index, isActive }: CitationCardPro
         "rounded-lg border p-3 text-sm transition-all cursor-pointer group",
         isActive
           ? "border-amber-400 bg-amber-50 shadow-sm"
-          : "border-stone-200 bg-white hover:border-amber-200 hover:bg-amber-50/50"
+          : "border-stone-200 bg-surface hover:border-amber-200 hover:bg-amber-50/50"
       )}
       onClick={handleJump}
     >

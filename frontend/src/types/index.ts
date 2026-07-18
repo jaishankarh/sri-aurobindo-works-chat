@@ -60,35 +60,43 @@ export type WSEventType =
   | "complete"
   | "error";
 
+// message_id identifies which query/response cycle an event belongs to —
+// the Redis stream backing this protocol is scoped per-message, not
+// per-session, so reconnecting mid-stream requires knowing it.
 export interface WSTokenEvent {
   type: "token";
   data: string;
   idx: number;
   session_id: string;
+  message_id: string;
 }
 
 export interface WSStatusEvent {
   type: "status";
   data: { status: string; detail?: string };
   session_id: string;
+  message_id: string;
 }
 
 export interface WSCitationEvent {
   type: "citation";
   data: { citations: Citation[] };
   session_id: string;
+  message_id: string;
 }
 
 export interface WSCompleteEvent {
   type: "complete";
   data: { token_count: number; message_id?: string };
   session_id: string;
+  message_id: string;
 }
 
 export interface WSErrorEvent {
   type: "error";
   data: { error: string };
   session_id: string;
+  message_id: string;
 }
 
 export type WSEvent =

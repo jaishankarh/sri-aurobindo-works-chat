@@ -2,12 +2,177 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Theme variables, consumed by tailwind.config.js's stone/amber/surface
+ * color definitions (rgb(var(--x) / <alpha-value>)) — every `bg-stone-*`,
+ * `text-amber-*`, `bg-surface` class in the app reads from whichever block
+ * below is active via the [data-theme] attribute on <html>, set by
+ * useThemeStore. Values are space-separated "R G B" triples (no rgb()
+ * wrapper) so Tailwind can splice in an alpha channel for opacity modifiers
+ * like `bg-amber-500/20`.
+ *
+ * "stone" is a light-to-dark neutral ramp (50=lightest, 900=darkest) in the
+ * light/sepia/solarized-light themes, and INVERTED (50=darkest, 900=lightest)
+ * in dark/solarized-dark — this lets every existing `bg-stone-50` (panel bg)
+ * / `text-stone-800` (primary text) class in every component keep working
+ * unchanged regardless of theme, without touching component code.
+ */
+:root,
+[data-theme="light"] {
+  --color-stone-50: 250 250 249;
+  --color-stone-100: 245 245 244;
+  --color-stone-200: 231 229 228;
+  --color-stone-300: 214 211 209;
+  --color-stone-400: 168 162 158;
+  --color-stone-500: 120 113 108;
+  --color-stone-600: 87 83 78;
+  --color-stone-700: 68 64 60;
+  --color-stone-800: 41 37 36;
+  --color-stone-900: 28 25 23;
+
+  --color-amber-50: 255 251 235;
+  --color-amber-100: 254 243 199;
+  --color-amber-200: 253 230 138;
+  --color-amber-300: 252 211 77;
+  --color-amber-400: 251 191 36;
+  --color-amber-500: 245 158 11;
+  --color-amber-600: 217 119 6;
+  --color-amber-700: 180 83 9;
+  --color-amber-800: 146 64 14;
+  --color-amber-900: 120 53 15;
+
+  --color-surface: 255 255 255;
+}
+
+/* Dark: charcoal tones (not pure black, which causes halation) with
+   off-white text (not pure #fff, which is harsh) — per current dark-mode
+   reading-app guidance. */
+[data-theme="dark"] {
+  --color-stone-50: 25 25 26;
+  --color-stone-100: 33 33 35;
+  --color-stone-200: 51 51 54;
+  --color-stone-300: 69 69 74;
+  --color-stone-400: 107 107 114;
+  --color-stone-500: 140 140 148;
+  --color-stone-600: 168 168 176;
+  --color-stone-700: 194 194 200;
+  --color-stone-800: 226 226 230;
+  --color-stone-900: 244 244 245;
+
+  --color-amber-50: 43 34 16;
+  --color-amber-100: 61 48 22;
+  --color-amber-200: 107 78 16;
+  --color-amber-300: 146 102 10;
+  --color-amber-400: 201 134 10;
+  --color-amber-500: 240 169 30;
+  --color-amber-600: 224 152 15;
+  --color-amber-700: 194 127 10;
+  --color-amber-800: 156 102 10;
+  --color-amber-900: 107 71 7;
+
+  --color-surface: 33 33 35;
+}
+
+/* Sepia: warm cream paper tone, classic long-form reading mode
+   (Kindle/Instapaper-style). */
+[data-theme="sepia"] {
+  --color-stone-50: 248 241 227;
+  --color-stone-100: 244 236 216;
+  --color-stone-200: 232 220 195;
+  --color-stone-300: 217 200 169;
+  --color-stone-400: 184 168 136;
+  --color-stone-500: 138 122 92;
+  --color-stone-600: 107 93 66;
+  --color-stone-700: 91 70 54;
+  --color-stone-800: 74 58 44;
+  --color-stone-900: 58 45 34;
+
+  --color-amber-50: 246 234 208;
+  --color-amber-100: 239 220 176;
+  --color-amber-200: 227 193 132;
+  --color-amber-300: 212 165 88;
+  --color-amber-400: 194 141 61;
+  --color-amber-500: 168 117 44;
+  --color-amber-600: 140 95 35;
+  --color-amber-700: 113 76 29;
+  --color-amber-800: 89 60 23;
+  --color-amber-900: 64 43 16;
+
+  --color-surface: 244 236 216;
+}
+
+/* Solarized Light (Ethan Schoonover's official palette: base3/base2/base1/
+   base0/base00/base01/base02/base03), a low-contrast scheme designed
+   specifically to reduce eye strain over long reading sessions. */
+[data-theme="solarized-light"] {
+  --color-stone-50: 253 246 227;
+  --color-stone-100: 238 232 213;
+  --color-stone-200: 216 210 189;
+  --color-stone-300: 147 161 161;
+  --color-stone-400: 131 148 150;
+  --color-stone-500: 101 123 131;
+  --color-stone-600: 88 110 117;
+  --color-stone-700: 7 54 66;
+  --color-stone-800: 0 43 54;
+  --color-stone-900: 0 30 38;
+
+  --color-amber-50: 251 240 209;
+  --color-amber-100: 245 226 168;
+  --color-amber-200: 236 203 108;
+  --color-amber-300: 221 176 58;
+  --color-amber-400: 201 159 16;
+  --color-amber-500: 181 137 0;
+  --color-amber-600: 156 117 0;
+  --color-amber-700: 125 94 0;
+  --color-amber-800: 95 71 0;
+  --color-amber-900: 66 50 0;
+
+  --color-surface: 238 232 213;
+}
+
+/* Solarized Dark — same palette, same selective-contrast relationships,
+   inverted for a dark background (base03) with base3 as the brightest text. */
+[data-theme="solarized-dark"] {
+  --color-stone-50: 0 43 54;
+  --color-stone-100: 7 54 66;
+  --color-stone-200: 13 74 88;
+  --color-stone-300: 88 110 117;
+  --color-stone-400: 101 123 131;
+  --color-stone-500: 131 148 150;
+  --color-stone-600: 147 161 161;
+  --color-stone-700: 207 214 201;
+  --color-stone-800: 238 232 213;
+  --color-stone-900: 253 246 227;
+
+  --color-amber-50: 43 36 0;
+  --color-amber-100: 61 51 0;
+  --color-amber-200: 107 89 0;
+  --color-amber-300: 146 121 0;
+  --color-amber-400: 201 163 0;
+  --color-amber-500: 224 184 0;
+  --color-amber-600: 203 163 0;
+  --color-amber-700: 168 134 0;
+  --color-amber-800: 125 100 0;
+  --color-amber-900: 84 67 0;
+
+  --color-surface: 7 54 66;
+}
+
 @layer base {
   :root {
     font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  html {
+    background-color: rgb(var(--color-stone-50));
+    color-scheme: light;
+  }
+  html[data-theme="dark"],
+  html[data-theme="solarized-dark"] {
+    color-scheme: dark;
   }
 
   html,
@@ -28,11 +193,11 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #d6d3d1;
+    background: rgb(var(--color-stone-300));
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #a8a29e;
+    background: rgb(var(--color-stone-400));
   }
 }
 

@@ -7,7 +7,11 @@ with its inputs, outputs, and timing logged to the Prefect UI.
 
 Flows:
   - ingest_document_flow: Parse, embed, and graph a single PDF
-  - rag_query_flow: Retrieve, synthesize, stream tokens to Redis
+  - rag_query_flow: Agentic RAG pipeline — plan the turn, retrieve across the
+    router's search queries, curate the candidate pool, stream the answer.
+    Each step is its own Prefect task so it's independently traceable, and
+    publishes a status event to Redis so the client can show granular
+    progress instead of one long silent wait.
 """
 
 import asyncio
@@ -70,51 +74,137 @@ async def ingest_document_flow(
     return result
 
 
-# ──────────────────────────── RAG Query Flow ─────────────────────────────────
+# ──────────────────────────── Agentic RAG Query Flow ─────────────────────────
 
 
-@task(name="retrieve-context", retries=1, retry_delay_seconds=5)
-async def retrieve_context_task(
-    session_id: str,
+@task(name="plan-turn", retries=1, retry_delay_seconds=5)
+async def plan_turn_task(
     message_id: str,
+    session_id: str,
     query: str,
-    settings_dict: dict,
-) -> list[dict]:
-    """Retrieve relevant context chunks for the query."""
+) -> dict:
+    """Fetch conversation history and let the router decide this turn's plan."""
+    from app.core.agent.router import plan_turn
     from app.database import get_async_session
-    from app.models.schemas import UserSettings
-    from app.services.chat import retrieve_context
+    from app.services.chat import format_history_transcript, get_conversation_history
     from app.services.streaming import get_redis, publish_event
 
     pf_logger = get_run_logger()
-    pf_logger.info(f"Retrieving context for: {query[:60]}")
-
-    user_settings = UserSettings(**settings_dict)
 
     redis = await get_redis()
     await publish_event(
-        redis, session_id, message_id, "status",
-        {"status": "retrieving", "detail": "Searching knowledge base"}
+        redis, message_id, "status",
+        {"status": "planning", "detail": "Understanding your question"}
     )
 
     async with get_async_session() as session:
-        contexts = await retrieve_context(session, query, user_settings)
+        history_messages = await get_conversation_history(session, uuid.UUID(session_id))
+    history_transcript = format_history_transcript(history_messages)
 
-    pf_logger.info(f"Retrieved {len(contexts)} chunks")
+    plan = await plan_turn(query, history_transcript=history_transcript)
+    pf_logger.info(f"Turn plan: needs_retrieval={plan.needs_retrieval} queries={plan.search_queries}")
+
+    return {"plan": plan.model_dump(), "history_transcript": history_transcript}
+
+
+@task(name="retrieve-candidates", retries=1, retry_delay_seconds=5)
+async def retrieve_candidates_task(
+    message_id: str,
+    settings_dict: dict,
+    plan_dict: dict,
+) -> list[dict]:
+    """Run hybrid retrieval for every router-generated search query and merge results."""
+    from app.database import get_async_session
+    from app.models.schemas import RetrievalSettings, UserSettings
+    from app.core.retrieval import hybrid_retrieve
+    from app.services.streaming import get_redis, publish_event
+
+    pf_logger = get_run_logger()
+    plan = plan_dict["plan"]
+
+    if not plan["needs_retrieval"]:
+        pf_logger.info("Router decided no new retrieval is needed for this turn")
+        return []
+
+    redis = await get_redis()
     await publish_event(
-        redis, session_id, message_id, "status",
-        {"status": "generating", "detail": f"Found {len(contexts)} relevant passages"}
+        redis, message_id, "status",
+        {"status": "retrieving", "detail": "Searching the corpus"}
     )
 
-    return [ctx.model_dump(mode="json") for ctx in contexts]
+    user_settings = UserSettings(**settings_dict)
+    retrieval_settings = RetrievalSettings(
+        alpha=user_settings.alpha,
+        top_k=user_settings.top_k,
+        graph_hops=user_settings.graph_hops,
+        language_filter=user_settings.language_filter or None,
+        document_filter=user_settings.selected_document_ids or None,
+    )
+
+    candidate_map: dict[str, dict] = {}
+    async with get_async_session() as session:
+        for search_query in plan["search_queries"]:
+            results = await hybrid_retrieve(session, search_query, retrieval_settings)
+            for ctx in results:
+                key = str(ctx.chunk_id)
+                if key not in candidate_map:
+                    candidate_map[key] = ctx.model_dump(mode="json")
+
+    candidates = list(candidate_map.values())
+    pf_logger.info(f"Retrieved {len(candidates)} merged candidates across {len(plan['search_queries'])} queries")
+
+    await publish_event(
+        redis, message_id, "status",
+        {"status": "retrieving", "detail": f"Found {len(candidates)} candidate passages"}
+    )
+
+    return candidates
+
+
+@task(name="select-chunks", retries=1, retry_delay_seconds=5)
+async def select_chunks_task(
+    message_id: str,
+    query: str,
+    settings_dict: dict,
+    candidate_dicts: list[dict],
+    plan_dict: dict,
+) -> list[dict]:
+    """Curate the merged candidate pool down to the chunks worth synthesizing from."""
+    from app.core.agent.curator import select_chunks
+    from app.models.schemas import RetrievedContext, UserSettings
+    from app.services.streaming import get_redis, publish_event
+
+    pf_logger = get_run_logger()
+
+    if not candidate_dicts:
+        return []
+
+    redis = await get_redis()
+    await publish_event(
+        redis, message_id, "status",
+        {"status": "selecting_sources", "detail": f"Reviewing {len(candidate_dicts)} passages"}
+    )
+
+    user_settings = UserSettings(**settings_dict)
+    candidates = [RetrievedContext(**d) for d in candidate_dicts]
+
+    selected = await select_chunks(
+        query,
+        candidates,
+        top_k=user_settings.top_k,
+        history_transcript=plan_dict["history_transcript"],
+    )
+    pf_logger.info(f"Curator selected {len(selected)} of {len(candidates)} candidates")
+
+    return [ctx.model_dump(mode="json") for ctx in selected]
 
 
 @task(name="stream-llm-response", retries=1, retry_delay_seconds=10)
 async def stream_llm_task(
-    session_id: str,
     message_id: str,
     query: str,
     context_dicts: list[dict],
+    history_transcript: str,
 ) -> dict:
     """Stream LLM tokens to Redis and persist the final message."""
     from app.core.llm.rag_prompt import extract_citations_from_response
@@ -128,18 +218,23 @@ async def stream_llm_task(
     contexts = [RetrievedContext(**d) for d in context_dicts]
 
     redis = await get_redis()
+    await publish_event(
+        redis, message_id, "status",
+        {"status": "generating", "detail": "Writing your answer"}
+    )
+
     full_response = ""
     token_index = 0
 
     try:
-        async for token in stream_answer(query, contexts):
-            await publish_token(redis, session_id, message_id, token, token_index)
+        async for token in stream_answer(query, contexts, history_transcript=history_transcript):
+            await publish_token(redis, message_id, token, token_index)
             full_response += token
             token_index += 1
     except Exception as e:
         pf_logger.error(f"Streaming error: {e}")
         await publish_event(
-            redis, session_id, message_id, "error",
+            redis, message_id, "error",
             {"error": str(e)}
         )
         raise
@@ -149,8 +244,8 @@ async def stream_llm_task(
     citations_json = [c.model_dump(mode="json") for c in citations]
 
     # Publish citations and completion signal
-    await publish_event(redis, session_id, message_id, "citation", {"citations": citations_json})
-    await publish_event(redis, session_id, message_id, "complete", {
+    await publish_event(redis, message_id, "citation", {"citations": citations_json})
+    await publish_event(redis, message_id, "complete", {
         "message_id": message_id,
         "token_count": token_index,
     })
@@ -170,32 +265,46 @@ async def stream_llm_task(
 
 @flow(
     name="rag-query",
-    description="Retrieve context, stream LLM answer, publish to Redis"
+    description="Plan the turn, retrieve across router queries, curate, stream the answer"
 )
 async def rag_query_flow(
-    session_id: str,
     message_id: str,
+    session_id: str,
     query: str,
     settings_dict: dict,
 ) -> dict:
     """
-    Prefect flow: full RAG query pipeline.
+    Prefect flow: full agentic RAG query pipeline.
 
-    Runs retrieval and LLM streaming as separate tracked tasks,
-    enabling Prefect UI visibility into each step's latency and outputs.
+    plan_turn_task -> retrieve_candidates_task (multi-query) -> select_chunks_task
+    -> stream_llm_task, each independently tracked in the Prefect UI and each
+    publishing its own status event so the client sees granular progress.
     """
-    context_dicts = await retrieve_context_task(
+    plan_dict = await plan_turn_task(
+        message_id=message_id,
         session_id=session_id,
+        query=query,
+    )
+
+    candidate_dicts = await retrieve_candidates_task(
+        message_id=message_id,
+        settings_dict=settings_dict,
+        plan_dict=plan_dict,
+    )
+
+    context_dicts = await select_chunks_task(
         message_id=message_id,
         query=query,
         settings_dict=settings_dict,
+        candidate_dicts=candidate_dicts,
+        plan_dict=plan_dict,
     )
 
     result = await stream_llm_task(
-        session_id=session_id,
         message_id=message_id,
         query=query,
         context_dicts=context_dicts,
+        history_transcript=plan_dict["history_transcript"],
     )
 
     return result

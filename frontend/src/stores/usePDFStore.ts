@@ -117,8 +117,11 @@ export const usePDFStore = create<PDFStore>()(
 
     jumpToCitation: (citation) => {
       const { loadDocument, setCurrentPage, setActiveHighlight } = get();
-      if (get().currentDocumentPath !== citation.file_path) {
-        loadDocument(citation.file_path, citation.page_number);
+      // citation.file_path is a backend-container filesystem path, not
+      // fetchable from the browser — use the API's file-serving route instead.
+      const url = `/api/v1/documents/${citation.document_id}/file`;
+      if (get().currentDocumentPath !== url) {
+        loadDocument(url, citation.page_number);
       } else {
         setCurrentPage(citation.page_number);
       }

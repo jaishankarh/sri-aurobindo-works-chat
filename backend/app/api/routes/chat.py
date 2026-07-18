@@ -45,7 +45,12 @@ async def chat_query(
 
     Runs retrieval + generation synchronously and returns the complete answer.
     """
-    from app.services.chat import generate_answer, retrieve_context
+    from app.services.chat import (
+        agentic_retrieve,
+        format_history_transcript,
+        generate_answer,
+        get_conversation_history,
+    )
 
     # Resolve or create session
     session_id = request.session_id
@@ -59,6 +64,10 @@ async def chat_query(
         if not chat_session:
             raise HTTPException(status_code=404, detail="Session not found")
 
+    # Fetch conversation history before adding this turn's user message to it
+    history_messages = await get_conversation_history(db, session_id)
+    history_transcript = format_history_transcript(history_messages)
+
     # Store user message
     user_msg = ChatMessage(
         session_id=session_id,
@@ -68,9 +77,13 @@ async def chat_query(
     )
     db.add(user_msg)
 
-    # Retrieve and generate
-    contexts = await retrieve_context(db, request.query, request.settings)
-    answer_text, citations = await generate_answer(request.query, contexts)
+    # Agentic retrieval (router -> multi-query retrieve -> curate) and generate
+    _plan, contexts = await agentic_retrieve(
+        db, request.query, request.settings, history_transcript=history_transcript
+    )
+    answer_text, citations = await generate_answer(
+        request.query, contexts, history_transcript=history_transcript
+    )
 
     citations_json = [c.model_dump(mode="json") for c in citations]
 
@@ -125,9 +138,14 @@ async def websocket_chat(
     WebSocket endpoint for streaming chat with Replay-then-Tail recovery.
 
     Protocol:
-    1. Client sends a query message or a reconnect message with last_seen_id.
+    1. Client sends a query message, or a reconnect message with the
+       message_id of the in-flight response plus its last_seen_id.
     2. Server runs rag_query_flow as a background Prefect flow.
-    3. Server streams all tokens from Redis (replaying missed ones on reconnect).
+    3. Server streams all tokens from Redis (replaying missed ones on
+       reconnect). The Redis stream is scoped to a single message_id (one
+       query/response cycle), not the whole session — a session can hold many
+       messages, and each gets its own stream so a new query never replays a
+       previous one's tokens.
     """
     await websocket.accept()
     logger.info(f"WebSocket connected: session={session_id}")
@@ -148,9 +166,15 @@ async def websocket_chat(
     redis = await get_redis()
 
     if msg_type == "reconnect":
-        # Pure reconnect: just replay + tail the existing stream
-        logger.info(f"Reconnect from last_seen_id={last_seen_id}")
-        await _stream_from_redis(websocket, redis, session_id, last_seen_id)
+        reconnect_message_id = msg.get("message_id")
+        if not reconnect_message_id:
+            await websocket.send_json(
+                {"type": "error", "data": {"error": "reconnect requires message_id"}}
+            )
+            await websocket.close()
+            return
+        logger.info(f"Reconnect to message={reconnect_message_id} from last_seen_id={last_seen_id}")
+        await _stream_from_redis(websocket, redis, session_id, reconnect_message_id, last_seen_id)
         return
 
     if not query:
@@ -195,34 +219,48 @@ async def websocket_chat(
 
     # Publish status: thinking
     from app.services.streaming import publish_event
-    await publish_event(redis, session_id, message_id, "status", {"status": "thinking"})
+    await publish_event(redis, message_id, "status", {"status": "thinking"})
 
-    # Launch Prefect flow in background
+    # Launch Prefect flow in background. Any uncaught exception here would
+    # otherwise be a silent failure — the client just hangs forever with no
+    # "complete" or "error" event, since this task's result is never awaited.
     import asyncio
     from app.workers.prefect_flows import rag_query_flow
 
-    asyncio.create_task(
-        rag_query_flow(
-            session_id=session_id,
-            message_id=message_id,
-            query=query,
-            settings_dict=settings_dict,
-        )
-    )
+    async def _run_flow():
+        try:
+            await rag_query_flow(
+                message_id=message_id,
+                session_id=session_id,
+                query=query,
+                settings_dict=settings_dict,
+            )
+        except Exception as e:
+            logger.error(f"rag_query_flow failed for message={message_id}: {e}")
+            await publish_event(redis, message_id, "error", {"error": str(e)})
+
+    asyncio.create_task(_run_flow())
 
     # Stream from Redis to WebSocket
-    await _stream_from_redis(websocket, redis, session_id, "0")
+    await _stream_from_redis(websocket, redis, session_id, message_id, "0")
 
 
 async def _stream_from_redis(
     websocket: WebSocket,
     redis,
     session_id: str,
+    message_id: str,
     last_seen_id: str,
 ) -> None:
-    """Relay all Redis stream events to the WebSocket client."""
+    """
+    Relay all Redis stream events (scoped to this message_id) to the client.
+
+    Every payload carries both session_id (which browser session this is)
+    and message_id (which query/response cycle) — the client needs the
+    latter to reconnect to the right stream if the connection drops mid-response.
+    """
     try:
-        async for entry in replay_then_tail(redis, session_id, last_seen_id=last_seen_id):
+        async for entry in replay_then_tail(redis, message_id, last_seen_id=last_seen_id):
             event_type = entry.get("type", "token")
             raw_data = entry.get("data", "")
 
@@ -232,6 +270,7 @@ async def _stream_from_redis(
                     "data": raw_data,
                     "idx": int(entry.get("idx", 0)),
                     "session_id": session_id,
+                    "message_id": message_id,
                 }
             else:
                 try:
@@ -242,6 +281,7 @@ async def _stream_from_redis(
                     "type": event_type,
                     "data": data,
                     "session_id": session_id,
+                    "message_id": message_id,
                 }
 
             await websocket.send_json(payload)

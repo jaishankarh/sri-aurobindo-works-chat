@@ -33,7 +33,10 @@ export function ChatInterface() {
 
   return (
     <div className="flex h-full flex-col bg-stone-50">
-      {/* Connection status bar */}
+      {/* Connection status bar. The socket is only open while a response is
+          streaming or actively connecting — it's expected to sit idle
+          ("disconnected") between messages, so that state is shown neutrally
+          rather than as an error; sendQuery reconnects transparently. */}
       <div
         className={clsx(
           "flex items-center gap-2 px-4 py-1.5 text-xs font-medium transition-all",
@@ -41,7 +44,7 @@ export function ChatInterface() {
             ? "bg-emerald-50 text-emerald-700"
             : connectionState === "connecting"
             ? "bg-amber-50 text-amber-700"
-            : "bg-red-50 text-red-700"
+            : "bg-stone-100 text-stone-500"
         )}
       >
         {connectionState === "connected" ? (
@@ -54,7 +57,7 @@ export function ChatInterface() {
             ? "Connected"
             : connectionState === "connecting"
             ? "Connecting…"
-            : "Disconnected — will retry automatically"}
+            : "Ready"}
         </span>
       </div>
 
@@ -75,11 +78,14 @@ export function ChatInterface() {
       {/* Messages */}
       <MessageList />
 
-      {/* Input */}
+      {/* Input. Not gated on connectionState === "connected" — the socket is
+          expected to be idle/disconnected between messages, and sendQuery
+          opens a fresh connection on demand. Only block submission while a
+          connection attempt is actively in flight, to avoid a double-send race. */}
       <ChatInput
         onSubmit={handleSubmit}
         isStreaming={isStreaming}
-        disabled={connectionState !== "connected"}
+        disabled={connectionState === "connecting"}
       />
     </div>
   );

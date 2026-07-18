@@ -77,7 +77,7 @@ class OllamaClient(BaseLLMClient):
             async with session.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=120),
+                timeout=aiohttp.ClientTimeout(total=300),
             ) as response:
                 response.raise_for_status()
                 data = await response.json()
@@ -227,6 +227,66 @@ class AnthropicClient(BaseLLMClient):
                 yield text
 
 
+class GeminiClient(BaseLLMClient):
+    """Client for Google Gemini models (e.g. gemini-2.0-flash)."""
+
+    def __init__(self, model: str | None = None):
+        self.model = model or settings.LLM_MODEL
+        from google import genai
+        self._client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+    async def generate(
+        self,
+        prompt: str,
+        max_tokens: int = 1024,
+        temperature: float | None = None,
+        system_prompt: str | None = None,
+    ) -> str:
+        from google.genai import types
+
+        config = types.GenerateContentConfig(
+            max_output_tokens=max_tokens,
+            temperature=temperature or settings.LLM_TEMPERATURE,
+            system_instruction=system_prompt,
+            # Gemini 2.5's internal "thinking" tokens are deducted from
+            # max_output_tokens before the visible answer, which silently
+            # truncated RAG synthesis responses on longer prompts. We want
+            # direct grounded synthesis from the provided context, not
+            # extended reasoning, so thinking is disabled outright.
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+        response = await self._client.aio.models.generate_content(
+            model=self.model, contents=prompt, config=config
+        )
+        return response.text or ""
+
+    async def stream(
+        self,
+        prompt: str,
+        max_tokens: int = 2048,
+        temperature: float | None = None,
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[str]:
+        from google.genai import types
+
+        config = types.GenerateContentConfig(
+            max_output_tokens=max_tokens,
+            temperature=temperature or settings.LLM_TEMPERATURE,
+            system_instruction=system_prompt,
+            # Gemini 2.5's internal "thinking" tokens are deducted from
+            # max_output_tokens before the visible answer, which silently
+            # truncated RAG synthesis responses on longer prompts. We want
+            # direct grounded synthesis from the provided context, not
+            # extended reasoning, so thinking is disabled outright.
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+        async for chunk in await self._client.aio.models.generate_content_stream(
+            model=self.model, contents=prompt, config=config
+        ):
+            if chunk.text:
+                yield chunk.text
+
+
 _llm_client_instance: BaseLLMClient | None = None
 
 
@@ -241,6 +301,8 @@ def get_llm_client() -> BaseLLMClient:
         _llm_client_instance = OpenAIClient()
     elif provider == "anthropic":
         _llm_client_instance = AnthropicClient()
+    elif provider == "gemini":
+        _llm_client_instance = GeminiClient()
     else:
         # Default to Ollama (local)
         _llm_client_instance = OllamaClient()
