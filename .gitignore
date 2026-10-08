@@ -44,6 +44,8 @@ frontend/.env.local
 
 # Models (large ML model weights)
 models/
+# ...but not the app's own Python package backend/app/models/ (SQLAlchemy + Pydantic models)
+!backend/app/models/
 *.bin
 *.safetensors
 *.pt

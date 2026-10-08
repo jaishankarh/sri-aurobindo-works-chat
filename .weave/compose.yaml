@@ -1,0 +1,143 @@
+# Run recipe: how the agent workflow brings this app up in a throwaway Environment.
+#
+# Kept apart from the developer's own compose file on purpose: no GPU reservation, no Ollama, no
+# fixed container names, no published ports, no local volumes. Standard tooling still runs it:
+#   docker compose -p sri-aurobindo-works-chat -f .weave/compose.yaml up --build
+# then, once it is up:
+#   docker compose -p sri-aurobindo-works-chat -f .weave/compose.yaml exec backend sh -c \
+#     'cd /app && PYTHONPATH=/app python /weave-seed/seed.py'
+#
+# Addresses in the Environment: <service>.sri-aurobindo-works-chat, e.g.
+#   backend.sri-aurobindo-works-chat:8000   frontend.sri-aurobindo-works-chat:80
+#   postgres.sri-aurobindo-works-chat:5432  neo4j.sri-aurobindo-works-chat:7687
+#
+# Models: the app is unchanged. Its own provider switches are pointed at `model-stub`
+# (.weave/model_stub/server.py), a small OpenAI-compatible test double, so there is no GPU, no
+# Ollama and no bge-m3 download. Answers are canned; vector search still works on the stub's
+# deterministic embeddings. No Test secret is needed.
+#
+# Credentials below are throwaway logins for databases that exist only for one run.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: weave-test-pg
+      POSTGRES_DB: rag_db
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/weave-test-neo4j
+      NEO4J_dbms_memory_heap_max__size: 512m
+      NEO4J_dbms_memory_pagecache_size: 128m
+
+  redis:
+    image: redis:7-alpine
+
+  # Orchestration the chat path runs its flows through (as in the developer compose file).
+  prefect:
+    image: prefecthq/prefect:3-python3.11
+    command: prefect server start --host 0.0.0.0
+    environment:
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+
+  # Stands in for Ollama (language model) and bge-m3 (embeddings).
+  model-stub:
+    image: python:3.12-slim
+    command: python /stub/server.py
+    environment:
+      EMBEDDING_DIM: "1024"
+    volumes:
+      - ./model_stub:/stub:ro
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rag:weave-test-pg@postgres:5432/rag_db
+      REDIS_URL: redis://redis:6379
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: weave-test-neo4j
+      PREFECT_API_URL: http://prefect:4200/api
+      # Language model: the OpenAI provider, whose SDK reads OPENAI_BASE_URL, aimed at the stub.
+      LLM_PROVIDER: openai
+      LLM_MODEL: stub-llm
+      OPENAI_BASE_URL: http://model-stub:8080/v1
+      OPENAI_API_KEY: stub-not-a-credential
+      # Embeddings: the hosted-bge-m3 provider (same 1024-dim space as production), aimed at the stub.
+      EMBEDDING_PROVIDER: bge_m3_cloud
+      EMBEDDING_MODEL: stub-embedding
+      EMBEDDING_DIM: "1024"
+      EMBEDDING_BASE_URL: http://model-stub:8080/v1
+      EMBEDDING_API_KEY: stub-not-a-credential
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: '["http://frontend.sri-aurobindo-works-chat","http://frontend"]'
+    volumes:
+      - ./seed:/weave-seed:ro
+    depends_on:
+      - postgres
+      - neo4j
+      - redis
+      - prefect
+      - model-stub
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_WS_URL: ws://backend.sri-aurobindo-works-chat:8000
+    depends_on:
+      - backend
+
+x-weave:
+  readiness:
+    backend:
+      command: curl -fsS http://localhost:8000/health
+      timeout: 600   # first start: the app creates its tables, extension and graph schema
+    frontend:
+      command: wget -qO /dev/null http://localhost/
+      timeout: 600   # image build (npm install + vite build) happens in `up`, not here
+    postgres:
+      command: pg_isready -U rag -d rag_db
+      timeout: 120
+    neo4j:
+      command: cypher-shell -u neo4j -p weave-test-neo4j "RETURN 1"
+      timeout: 180
+    redis:
+      command: redis-cli ping
+    prefect:
+      command: python -c "import urllib.request as u; u.urlopen('http://localhost:4200/api/health')"
+      timeout: 180
+    model-stub:
+      command: python -c "import urllib.request as u; u.urlopen('http://localhost:8080/health')"
+
+  # The databases the agent can look into through Environment MCP servers.
+  databases:
+    - service: postgres
+      kind: postgres
+      credentials:
+        user: {env: POSTGRES_USER}
+        password: {env: POSTGRES_PASSWORD}
+        database: {env: POSTGRES_DB}
+    - service: neo4j
+      kind: neo4j
+      credentials:
+        user: neo4j
+        password: weave-test-neo4j
+
+  # Synthetic data, run once everything is ready; re-running applies only what is missing.
+  seed:
+    service: backend
+    command: cd /app && PYTHONPATH=/app python /weave-seed/seed.py
+    timeout: 300

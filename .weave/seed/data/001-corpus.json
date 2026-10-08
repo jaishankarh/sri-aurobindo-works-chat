@@ -1,0 +1,317 @@
+{
+  "documents": [
+    {
+      "id": "3ba9f201-9545-502b-8d6b-686913b6496b",
+      "title": "[Synthetic] Essay on Aspiration and Surrender",
+      "author": "Synthetic Author",
+      "file_path": "/app/data/pdfs/synthetic-essay.pdf",
+      "page_count": 3,
+      "category": "prose",
+      "language": "en",
+      "file_hash": "130384d9e4646c42e6acd06eddfc5b0377bfc8b21e43fe117548e127be98a0f3",
+      "is_processed": true
+    },
+    {
+      "id": "52a7f07c-4e36-5b2c-b7c3-e17dd3d01baa",
+      "title": "[Synthetic] Lettres sur la transformation",
+      "author": "Synthetic Author",
+      "file_path": "/app/data/pdfs/synthetic-lettres.pdf",
+      "page_count": 2,
+      "category": "prose",
+      "language": "fr",
+      "file_hash": "e43029ac0951dadd66f052fa6c48ca1ae6d6e1eac746d64ea0023f2b6f300806",
+      "is_processed": true
+    },
+    {
+      "id": "658539ac-5f8e-53d5-ae8d-d090bb839d78",
+      "title": "[Synthetic] Verses and Mantras",
+      "author": "Synthetic Author",
+      "file_path": "/app/data/pdfs/synthetic-verses.pdf",
+      "page_count": 2,
+      "category": "poetry",
+      "language": "sa",
+      "file_hash": "04700fe8ec03bec1e07ae05720c927afa585e83b1c25aca18880b1db6e9106ee",
+      "is_processed": true
+    }
+  ],
+  "chunks": [
+    {
+      "id": "5b3388c4-490e-546c-845e-24961af02baf",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b",
+      "chunk_index": 0,
+      "page_number": 1,
+      "text": "Aspiration is the flame of the soul turned toward the light. It rises from the heart of the seeker and does not depend on outer circumstances.",
+      "language_tag": "en",
+      "chunk_type": "prose",
+      "bbox": [
+        72.0,
+        640.0,
+        540.0,
+        700.0
+      ],
+      "iast_text": null,
+      "sanskrit_glossary": null
+    },
+    {
+      "id": "7ff34425-8c66-5700-8e9b-c001d1f667d1",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b",
+      "chunk_index": 1,
+      "page_number": 2,
+      "text": "Surrender is the offering of the whole nature to the divine will. In surrender the seeker gives up the demand of the ego and trusts a greater guidance.",
+      "language_tag": "en",
+      "chunk_type": "prose",
+      "bbox": [
+        72.0,
+        640.0,
+        540.0,
+        700.0
+      ],
+      "iast_text": null,
+      "sanskrit_glossary": null
+    },
+    {
+      "id": "208c5280-326f-5006-94f3-7fe7ea03e0d2",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b",
+      "chunk_index": 2,
+      "page_number": 3,
+      "text": "Consciousness has many planes, and the integral yoga seeks to bring the higher consciousness down into the physical life so that it is transformed.",
+      "language_tag": "en",
+      "chunk_type": "prose",
+      "bbox": [
+        72.0,
+        640.0,
+        540.0,
+        700.0
+      ],
+      "iast_text": null,
+      "sanskrit_glossary": null
+    },
+    {
+      "id": "98b033f8-4769-5528-926e-adff0d10c5f9",
+      "document_id": "52a7f07c-4e36-5b2c-b7c3-e17dd3d01baa",
+      "chunk_index": 0,
+      "page_number": 1,
+      "text": "La transformation du corps demande une aspiration constante et un abandon total a la volonte divine. La conscience supérieure descend peu a peu dans la matiere.",
+      "language_tag": "fr",
+      "chunk_type": "prose",
+      "bbox": [
+        72.0,
+        640.0,
+        540.0,
+        700.0
+      ],
+      "iast_text": null,
+      "sanskrit_glossary": null
+    },
+    {
+      "id": "0c13bda4-9803-5c4f-a714-4f988235bfa7",
+      "document_id": "52a7f07c-4e36-5b2c-b7c3-e17dd3d01baa",
+      "chunk_index": 1,
+      "page_number": 2,
+      "text": "La patience est la compagne de la transformation: chaque cellule doit apprendre a recevoir la lumiere.",
+      "language_tag": "fr",
+      "chunk_type": "prose",
+      "bbox": [
+        72.0,
+        640.0,
+        540.0,
+        700.0
+      ],
+      "iast_text": null,
+      "sanskrit_glossary": null
+    },
+    {
+      "id": "4bef6114-a7e7-5ff6-88e6-75965256f7e8",
+      "document_id": "658539ac-5f8e-53d5-ae8d-d090bb839d78",
+      "chunk_index": 0,
+      "page_number": 1,
+      "text": "ॐ तत् सत् । समर्पणं परमेश्वराय",
+      "language_tag": "sa",
+      "chunk_type": "poetry",
+      "bbox": [
+        108.0,
+        600.0,
+        400.0,
+        640.0
+      ],
+      "iast_text": "oṃ tat sat | samarpaṇaṃ parameśvarāya",
+      "sanskrit_glossary": {
+        "samarpaṇa": "surrender, offering",
+        "parameśvara": "the supreme lord"
+      }
+    },
+    {
+      "id": "14648ffd-79f1-5d20-9e53-5f3c131f1a7c",
+      "document_id": "658539ac-5f8e-53d5-ae8d-d090bb839d78",
+      "chunk_index": 1,
+      "page_number": 2,
+      "text": "A flame ascends in silence,\n  the heart a lamp of light;\nthe soul in quiet surrender\n  keeps vigil through the night.",
+      "language_tag": "en",
+      "chunk_type": "poetry",
+      "bbox": [
+        120.0,
+        520.0,
+        420.0,
+        600.0
+      ],
+      "iast_text": null,
+      "sanskrit_glossary": null
+    }
+  ],
+  "entities": [
+    {
+      "id": "9c3a070b-a3c3-5663-937a-1e4734fc2169",
+      "label": "Aspiration",
+      "entity_type": "concept",
+      "description": "The flame of the soul turned toward the light",
+      "chunk_id": "5b3388c4-490e-546c-845e-24961af02baf",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b"
+    },
+    {
+      "id": "d5d34645-d17b-5622-8518-083f7803cf49",
+      "label": "Soul",
+      "entity_type": "concept",
+      "description": "The inner being that aspires",
+      "chunk_id": "5b3388c4-490e-546c-845e-24961af02baf",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b"
+    },
+    {
+      "id": "258e0338-368e-5f50-80fe-ea76601e2c67",
+      "label": "Surrender",
+      "entity_type": "concept",
+      "description": "Offering of the nature to the divine will",
+      "chunk_id": "7ff34425-8c66-5700-8e9b-c001d1f667d1",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b"
+    },
+    {
+      "id": "84315080-90dd-5f75-9f24-9e16fb8f4f69",
+      "label": "Ego",
+      "entity_type": "concept",
+      "description": "The separate self whose demand is given up in surrender",
+      "chunk_id": "7ff34425-8c66-5700-8e9b-c001d1f667d1",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b"
+    },
+    {
+      "id": "ffd52ecc-03e7-5a29-b78c-f8e53a5ece97",
+      "label": "Divine Will",
+      "entity_type": "concept",
+      "description": "The greater guidance trusted in surrender",
+      "chunk_id": "7ff34425-8c66-5700-8e9b-c001d1f667d1",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b"
+    },
+    {
+      "id": "9ec7be44-2e88-5277-8497-75e7be0b377e",
+      "label": "Consciousness",
+      "entity_type": "concept",
+      "description": "Has many planes; the higher is brought down",
+      "chunk_id": "208c5280-326f-5006-94f3-7fe7ea03e0d2",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b"
+    },
+    {
+      "id": "f953be1b-cec2-55eb-925e-d6fb1e033e1f",
+      "label": "Integral Yoga",
+      "entity_type": "practice",
+      "description": "Seeks transformation of the whole life",
+      "chunk_id": "208c5280-326f-5006-94f3-7fe7ea03e0d2",
+      "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b"
+    },
+    {
+      "id": "54a87b9c-2e3b-52e0-9e00-3cb91cddff88",
+      "label": "Transformation",
+      "entity_type": "concept",
+      "description": "Change of the body and nature by the higher consciousness",
+      "chunk_id": "98b033f8-4769-5528-926e-adff0d10c5f9",
+      "document_id": "52a7f07c-4e36-5b2c-b7c3-e17dd3d01baa"
+    }
+  ],
+  "relations": [
+    {
+      "source_id": "d5d34645-d17b-5622-8518-083f7803cf49",
+      "target_id": "9c3a070b-a3c3-5663-937a-1e4734fc2169",
+      "relation_type": "PRACTICES",
+      "weight": 1.0
+    },
+    {
+      "source_id": "9c3a070b-a3c3-5663-937a-1e4734fc2169",
+      "target_id": "258e0338-368e-5f50-80fe-ea76601e2c67",
+      "relation_type": "LEADS_TO",
+      "weight": 1.0
+    },
+    {
+      "source_id": "258e0338-368e-5f50-80fe-ea76601e2c67",
+      "target_id": "ffd52ecc-03e7-5a29-b78c-f8e53a5ece97",
+      "relation_type": "OFFERED_TO",
+      "weight": 1.0
+    },
+    {
+      "source_id": "258e0338-368e-5f50-80fe-ea76601e2c67",
+      "target_id": "84315080-90dd-5f75-9f24-9e16fb8f4f69",
+      "relation_type": "DISSOLVES",
+      "weight": 1.0
+    },
+    {
+      "source_id": "f953be1b-cec2-55eb-925e-d6fb1e033e1f",
+      "target_id": "9ec7be44-2e88-5277-8497-75e7be0b377e",
+      "relation_type": "BRINGS_DOWN",
+      "weight": 1.0
+    },
+    {
+      "source_id": "9ec7be44-2e88-5277-8497-75e7be0b377e",
+      "target_id": "54a87b9c-2e3b-52e0-9e00-3cb91cddff88",
+      "relation_type": "CAUSES",
+      "weight": 1.0
+    },
+    {
+      "source_id": "f953be1b-cec2-55eb-925e-d6fb1e033e1f",
+      "target_id": "258e0338-368e-5f50-80fe-ea76601e2c67",
+      "relation_type": "REQUIRES",
+      "weight": 1.0
+    },
+    {
+      "source_id": "9c3a070b-a3c3-5663-937a-1e4734fc2169",
+      "target_id": "54a87b9c-2e3b-52e0-9e00-3cb91cddff88",
+      "relation_type": "PREPARES",
+      "weight": 1.0
+    }
+  ],
+  "sessions": [
+    {
+      "id": "96c19667-dd5b-5d9d-8e28-692944b0f3b5",
+      "settings": {
+        "alpha": 0.7,
+        "top_k": 5,
+        "graph_hops": 2,
+        "language_filter": [
+          "en",
+          "fr",
+          "sa"
+        ],
+        "selected_document_ids": [],
+        "llm_model": "stub-llm"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "b9fe1ca8-8c5e-5d5c-9139-a901557d586e",
+      "session_id": "96c19667-dd5b-5d9d-8e28-692944b0f3b5",
+      "role": "user",
+      "content": "What is surrender?",
+      "citations": [],
+      "is_complete": true
+    },
+    {
+      "id": "6ae0716a-a0fa-5bcc-9fc2-19137ccb64ce",
+      "session_id": "96c19667-dd5b-5d9d-8e28-692944b0f3b5",
+      "role": "assistant",
+      "content": "[Synthetic seeded answer] Surrender is the offering of the whole nature to the divine will [CITATION:7ff34425-8c66-5700-8e9b-c001d1f667d1].",
+      "citations": [
+        {
+          "chunk_id": "7ff34425-8c66-5700-8e9b-c001d1f667d1",
+          "document_id": "3ba9f201-9545-502b-8d6b-686913b6496b"
+        }
+      ],
+      "is_complete": true
+    }
+  ]
+}
